@@ -1,0 +1,231 @@
+# Complete EC2 Laravel Installation Guide
+
+## 1. Initial Server Setup
+
+### Update System
+```bash
+sudo apt update
+sudo apt upgrade -y
+```
+
+### Install Required Packages
+```bash
+sudo apt install -y \
+    nginx \
+    mysql-server \
+    php8.1 \
+    php8.1-fpm \
+    php8.1-mysql \
+    php8.1-mbstring \
+    php8.1-xml \
+    php8.1-bcmath \
+    php8.1-curl \
+    php8.1-zip \
+    unzip \
+    git \
+    composer
+```
+
+## 2. MySQL Configuration
+
+### Secure MySQL Installation
+```bash
+sudo mysql_secure_installation
+```
+
+### Create Database and User
+```bash
+sudo mysql
+```
+
+```sql
+CREATE DATABASE laravel_db;
+CREATE USER 'laravel_user'@'localhost' IDENTIFIED BY 'your_secure_password';
+GRANT ALL PRIVILEGES ON laravel_db.* TO 'laravel_user'@'localhost';
+FLUSH PRIVILEGES;
+EXIT;
+```
+
+## 3. PHP Configuration
+
+### Configure PHP FPM
+Edit `/etc/php/8.1/fpm/php.ini` and update these values:
+```ini
+upload_max_filesize = 64M
+post_max_size = 64M
+max_execution_time = 180
+memory_limit = 256M
+```
+
+Restart PHP-FPM:
+```bash
+sudo systemctl restart php8.1-fpm
+```
+
+## 4. Nginx Configuration
+
+Create a new Nginx configuration file:
+```bash
+sudo nano /etc/nginx/sites-available/laravel
+```
+
+Add this configuration:
+```nginx
+server {
+    listen 80;
+    server_name your_domain_or_ip;
+    root /var/www/html/public;
+    index index.php;
+
+    location ~ \.php$ {
+        fastcgi_split_path_info ^(.+\.php)(/.+)$;
+        fastcgi_pass unix:/var/run/php/php8.1-fpm.sock;
+        fastcgi_index index.php;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_param PATH_INFO $fastcgi_path_info;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ~ /\. {
+        deny all;
+    }
+
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+}
+```
+
+Enable the configuration:
+```bash
+sudo ln -sf /etc/nginx/sites-available/laravel /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t
+sudo systemctl restart nginx
+```
+
+## 5. Laravel Application Setup
+
+### Clone and Configure Application
+```bash
+sudo rm -rf /var/www/html/*
+cd /var/www/html
+sudo git clone https://github.com/your-repo/your-app.git .
+sudo chown -R www-data:www-data /var/www/html
+sudo chmod -R 755 /var/www/html
+sudo chmod -R 775 storage bootstrap/cache
+composer install --no-dev --optimize-autoloader
+```
+
+### Environment Setup
+```bash
+cp .env.example .env
+php artisan key:generate
+```
+
+Update `.env` file with appropriate values:
+```env
+APP_NAME="Your App Name"
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=http://your_domain_or_ip
+
+DB_CONNECTION=mysql
+DB_HOST=localhost
+DB_DATABASE=laravel_db
+DB_USERNAME=laravel_user
+DB_PASSWORD=your_secure_password
+
+CACHE_DRIVER=file
+SESSION_DRIVER=file
+QUEUE_CONNECTION=sync
+```
+
+### Final Laravel Setup
+```bash
+php artisan storage:link
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+php artisan migrate --force
+```
+
+## 6. Security Configuration
+
+### Configure Firewall
+```bash
+sudo ufw allow 22
+sudo ufw allow 80
+sudo ufw allow 443
+sudo ufw enable
+```
+
+### Set File Permissions
+```bash
+sudo find /var/www/html -type f -exec chmod 644 {} \;
+sudo find /var/www/html -type d -exec chmod 755 {} \;
+sudo chown -R www-data:www-data storage
+sudo chown -R www-data:www-data bootstrap/cache
+```
+
+## 7. Maintenance and Troubleshooting
+
+### Common Commands
+```bash
+# Clear Laravel caches
+php artisan cache:clear
+php artisan config:clear
+php artisan route:clear
+php artisan view:clear
+
+# Update application
+git pull origin main
+composer install --no-dev --optimize-autoloader
+php artisan migrate --force
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+
+# Backup database
+mysqldump -u laravel_user -p laravel_db > backup.sql
+```
+
+### Service Status Checks
+```bash
+sudo systemctl status nginx
+sudo systemctl status php8.1-fpm
+sudo systemctl status mysql
+```
+
+### View Logs
+```bash
+# Nginx error logs
+sudo tail -f /var/log/nginx/error.log
+
+# Laravel logs
+sudo tail -f storage/logs/laravel.log
+```
+
+### Common Issues
+
+#### Permission Issues
+```bash
+sudo chown -R www-data:www-data /var/www/html
+sudo chmod -R 755 /var/www/html
+sudo chmod -R 775 storage bootstrap/cache
+```
+
+#### 502 Bad Gateway
+```bash
+sudo systemctl restart php8.1-fpm
+sudo systemctl restart nginx
+```
+
+#### Database Connection Issues
+```bash
+php artisan config:clear
+sudo systemctl restart mysql
+```
